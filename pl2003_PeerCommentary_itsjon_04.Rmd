@@ -1,0 +1,169 @@
+---
+title: "pL2003_OriginalHomeworkCode_04"
+output: html_document
+date: "2025-03-15"
+---
+
+
+```{r}
+# Load required libraries
+library(ggplot2)
+library(dplyr)
+```
+
+
+```{r}
+#p1, n1, p0 no default
+#p2, n2 NULL default 
+#alternative- "two sided" 
+#conf lvl= 0.95
+
+Z.prop.test <- function(p1, n1, p2 = NULL, n2 = NULL, p0, alternative = "two.sided", conf.level = 0.95) {
+  
+# Step 1: Rules of thumb 
+if (n1 * p1 <= 5 || n1 * (1 - p1) <= 5) {warning("Normal approximation may not be valid: n1 * p1 or n1 * (1 - p1) <= 5.")} #warning message if it is not greater than 5 
+  
+if (!is.null(p2) & !is.null(n2)) {if (n2 * p2 <= 5 || n2 * (1 - p2) <= 5) {warning("Normal approximation may not be valid: n2 * p2 or n2 * (1 - p2) <= 5.")}}
+  
+# Step 2: One-sample test
+if (is.null(p2) || is.null(n2)) {se <- sqrt(p0 * (1 - p0) / n1)  # Standard error
+Z <- (p1 - p0) / se  # Z-score
+estimate <- p1  # Estimate is just p1
+} 
+
+# Step 3: Two-sample test
+else {pooled_p <- (p1 * n1 + p2 * n2) / (n1 + n2)  # Pooled proportion
+se <- sqrt(pooled_p * (1 - pooled_p) * (1/n1 + 1/n2))  # Standard error
+Z <- (p1 - p2) / se  # Z-score
+estimate <- p1 - p2  # Estimate is the difference in proportions
+}
+  
+# Step 4: P-value calculation
+P <- if (alternative == "two.sided") {2 * (1 - pnorm(abs(Z)))} 
+else if (alternative == "less") {pnorm(Z)} else if (alternative == "greater") {1 - pnorm(Z)} 
+else {stop("Invalid alternative hypothesis. Use 'two.sided', 'less', or 'greater'.")}
+  
+# Step 5: Confidence interval
+Z_critical <- qnorm(1 - (1 - conf.level) / 2)
+margin <- Z_critical * se
+CI <- c(estimate - margin, estimate + margin)
+  
+# Step 6: Return results
+return(list(Z = Z, P = P, CI = CI))}
+  
+```
+## Jon's Comment: "Your set up looks good. Very neat and readable. Nothing else to add."
+```{r, error=TRUE}
+
+# Load the dataset 
+data <- read.csv ("C:/Users/Richard/Desktop/AN588 R Studio/KamilarAndCooperData.csv") 
+
+# View the structure of the dataset
+str(data)
+
+# Fit the first regression model (without log transformation)
+model1 <- lm(MaxLongevity_m ~ Brain_Size_Species_Mean, data = data)
+
+# Fit the second regression model (with log transformation)
+model2 <- lm(log(MaxLongevity_m) ~ log(Brain_Size_Species_Mean), data = data)
+
+# View the regression summaries
+summary(model1)
+summary(model2)
+
+# Scatterplot with regression line
+plot1 <- ggplot(data, aes(x = Brain_Size_Species_Mean, y = MaxLongevity_m)) 
+
+#dot colors 
+plot1 <- plot1 + geom_point(color = "blue")  
+
+#linear regression line, red, no shaded region around regression line to show se
+plot1 <- plot1 + geom_smooth(method = "lm", color = "red", se = FALSE)  
+
+ #labels for plot
+plot1 <- plot1+ labs(title = "Longevity vs Brain Size", x = "Brain Size (grams)", y = "Longevity (months)") + theme_minimal()   #labels for plot
+
+# Display the plot
+plot1
+
+plot2 <- ggplot(data, aes(x = log(Brain_Size_Species_Mean), y = log(MaxLongevity_m))) 
+
+#dot colors 
+plot2 <- plot2+ geom_point(color = "blue") 
+
+#linear regression line, red, no shaded region around regression line to show se
+plot2 <- plot2+ geom_smooth(method = "lm", color = "red", se = FALSE) 
+
+#labels for plot
+plot2 <- plot2+ labs(title = "Log-Log Relationship: Longevity vs Brain Size", x = "Log(Brain Size)", y = "Log(Longevity)") + theme_minimal()
+
+# Display the plot
+plot2
+
+#calculate the confidence intervals for the parameters (coefficients) of lm
+confint(model1, level = 0.90)  # 90% CI for Model 1
+confint(model2, level = 0.90)  # 90% CI for Model 2
+
+#Check for missing values and infinite values before analysis or modeling to prevent erros 
+sum(is.na(data$Brain_Size_Species_Mean))  # Count NAs
+sum(is.infinite(data$Brain_Size_Species_Mean))  # Count Inf values
+
+#remove na and inf values 
+data <- data %>% filter(!is.na(Brain_Size_Species_Mean) & is.finite(Brain_Size_Species_Mean))
+
+# Create prediction data
+new_data <- data.frame(Brain_Size_Species_Mean = seq(min(data$Brain_Size_Species_Mean), max(data$Brain_Size_Species_Mean), length.out = 100))
+
+#generate sequence with values between min and max to plot  
+
+predictions <- predict(model1, newdata = new_data, interval = "prediction", level = 0.90) #generate generate prediction intervals for values of y at each x
+
+confidence <- predict(model1, newdata = new_data, interval = "confidence", level = 0.90) #generate confidence intervals around our predicted mean value for y values
+
+# Combine the predictions and confidence intervals into a new data frame
+df <- cbind(new_data, predictions, confidence[,2:3])
+# Rename the columns
+names(df) <- c("x", "y", "yhat", "CIfit", "CIlwr", "CIupr")
+# View the resulting data frame
+head(df)
+
+# Plot with CI and PI bands
+ggplot() +  
+# Scatterplot of the data
+geom_point(data = data, aes(x = Brain_Size_Species_Mean, y = MaxLongevity_m), color = "blue") +  
+#Regression line 
+geom_line(data = plot_data, aes(x = Brain_Size_Species_Mean, y = fit), color = "red") +  
+#Confidence Interval Bounds (blue)
+geom_line(data = plot_data, aes(x= Brain_Size_Species_Mean, y= lwr_conf), color= "blue")+
+geom_line(data = plot_data, aes(x = Brain_Size_Species_Mean, y = upr_conf), color = "blue")+
+# Prediction Interval (Green)
+geom_line(data = plot_data, aes(x = Brain_Size_Species_Mean, y = lwr_pred), color = "green") +
+geom_line(data = plot_data, aes(x = Brain_Size_Species_Mean, y = upr_pred), color = "green")
+
+## Jon's Comment: "what's plot_data? Is that meant for new_data or your df?"
+
+# Labels and theme
+labs(title = "Regression with Confidence & Prediction Intervals", x = "Brain Size (grams)", y = "Longevity (months)") +  
+theme_minimal()
+
+# Create new data point for prediction
+new_species <- data.frame(Brain_Size_Species_Mean = 800)
+
+# Get prediction interval
+predict(model1, new_species, interval = "prediction", level = 0.90)
+
+```
+Producing the point estimate- The point estimate longevity for a species with 800g brain size is 1223.345 with a 90% prediction interval of the true longevity lying between 1021.805 and 1424.884
+
+
+Comparing the models 
+Using summary() for the Linear and Log-Log model, the log-log model shows a better fit for the data 
+The residuals for log-log model is smaller and less spread out indicating that the transformation helped improve the fit of the model. 
+
+The Log-Log model also has a higher R^2 value compared to the linear model (49.28%). For model 1, 49.28% of the variation in longevity is explained by brain size, but the remaining is not. For model 2, 57.8% is explained. 
+
+The residual standard error for log-log is also much smaller than the linear model, indicating that the predictions are more precise. 
+
+I would trust the model to predict the observations accurately, but since 800 is much larger than the other values from the data, I would be more careful when predicting.  
+
+## Jon's Comment: "For the most part, everything looks good, except for the Scatterplot Data. It might have been an error there, but I wasn't able to run it."
